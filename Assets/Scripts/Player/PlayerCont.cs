@@ -9,6 +9,7 @@ public class PlayerCont : MonoBehaviour
     public float walkSpeed;
     public float sprintSpeed;
     public float sliderSpeed;
+    public float climbingSpeed;
     public float wallRunSpeed;
     private float desiredMoveSpeed;
     private float lastDesiredMoveSpeed;
@@ -21,6 +22,7 @@ public class PlayerCont : MonoBehaviour
     public float crouchYScale;
     private float startYScale;
     public GameObject crouchingPoint;
+
     [Header("Slope Handling")]
     public float masSlopeAngle;
     private RaycastHit slopeHit;
@@ -31,6 +33,8 @@ public class PlayerCont : MonoBehaviour
     public float jumpCooldown;
     public float airMultiplier;
     public bool readyToJump;
+    [Header("References")]
+    public Climbing climbingScript;
 
     [Header("KeyBinds")]
     public KeyCode jumpKey = KeyCode.Space;
@@ -52,12 +56,14 @@ public class PlayerCont : MonoBehaviour
         walking,
         sprinting,
         crouching,
+        climbing,
         wallRunning,
         sliding,
         air
     };
 
     public bool sliding;
+    public bool climbing;
     public bool wallRunning;
 
     float horizontalInput;
@@ -70,6 +76,7 @@ public class PlayerCont : MonoBehaviour
     {
         Rigidbody = GetComponent<Rigidbody>();
         Rigidbody.freezeRotation = true;
+        climbingScript = GetComponent<Climbing>();
 
         readyToJump = true;
 
@@ -79,7 +86,7 @@ public class PlayerCont : MonoBehaviour
 
     void Update()
     {
-        
+
         CrouchPoint();
         grounded =Physics.Raycast(transform.position,Vector3.down,playerHeight*0.5f+0.2f,whatIsGround);
 
@@ -104,11 +111,23 @@ public class PlayerCont : MonoBehaviour
 
     public void StateHandler()
     {
+        if (climbingScript.exitingWall)
+        {
+            return;
+        }
+        //Climb
+        if (climbing)
+        {
+            state = MovementState.climbing;
+            desiredMoveSpeed = climbingSpeed;
+        }
+        //wall Runn
         if (wallRunning)
         {
             state = MovementState.wallRunning;
             desiredMoveSpeed = wallRunSpeed;
         }
+        //slide
         else if (sliding)
         {
             state = MovementState.sliding;
@@ -120,17 +139,21 @@ public class PlayerCont : MonoBehaviour
             {
                 desiredMoveSpeed = sprintSpeed;
             }
+            
         }
+        //Hýzlý Kosma
         else if (grounded && Input.GetKey(sprintKey))
         {
             state = MovementState.sprinting;
             desiredMoveSpeed = sprintSpeed;
         }
+        //Yürüme
         else if (grounded)
         {
             state = MovementState.walking;
             desiredMoveSpeed = walkSpeed;
         }
+        //Crouch
         else if (Input.GetKey(crouchKey))
         {
             state = MovementState.crouching;
@@ -140,10 +163,9 @@ public class PlayerCont : MonoBehaviour
         {
             state = MovementState.air;
         }
-        Debug.Log(Mathf.Abs(desiredMoveSpeed - lastDesiredMoveSpeed));
-        if (Mathf.Abs(desiredMoveSpeed - lastDesiredMoveSpeed)>4f &&  moveSpeed !=0)
+        //Debug.Log(Mathf.Abs(desiredMoveSpeed - lastDesiredMoveSpeed));
+        if (Mathf.Abs(desiredMoveSpeed - lastDesiredMoveSpeed)>5f &&  moveSpeed !=0)
         {
-            Debug.Log("1");
             StopAllCoroutines();
             StartCoroutine(SmoothlyLerpMoveSpeed());
         }
@@ -151,7 +173,8 @@ public class PlayerCont : MonoBehaviour
         {
             moveSpeed = desiredMoveSpeed;
         }
-        
+        Debug.Log(moveSpeed);
+
         lastDesiredMoveSpeed = desiredMoveSpeed;
         
     }
@@ -160,14 +183,16 @@ public class PlayerCont : MonoBehaviour
         float time = 0;
         float diffrence = Mathf.Abs(desiredMoveSpeed - moveSpeed);
         float startValue = moveSpeed;
+
         while (time<diffrence)
         {
-            Debug.Log("2");
             moveSpeed = Mathf.Lerp(startValue, desiredMoveSpeed, time / diffrence);
             time += Time.deltaTime;
+            
             yield return null;
         }
         moveSpeed = desiredMoveSpeed;
+        Debug.Log(moveSpeed);
     }
 
     private void FixedUpdate()
@@ -218,7 +243,7 @@ public class PlayerCont : MonoBehaviour
         {
             Rigidbody.AddForce(direction.normalized * moveSpeed * 10f* airMultiplier, ForceMode.Force);
         }
-        Rigidbody.useGravity=!OnSlope();
+        if(!wallRunning) Rigidbody.useGravity=!OnSlope();
     }
     private void SpeedControl()
     {
